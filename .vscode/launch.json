@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Launch CareHomeApp",
+      "request": "launch",
+      "mainClass": "CareHomeApp",
+      "vmArgs": "--module-path /Users/mandy/Desktop/javafx-sdk-22/lib --add-modules javafx.controls,javafx.fxml"
+    }
+  ]
+}
+

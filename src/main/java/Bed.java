@@ -19,7 +19,7 @@ public class Bed {
         this.resident = r;
     }
 
-    public void vacate(){
+    public void vacant(){
         this.resident = null;
     }
 

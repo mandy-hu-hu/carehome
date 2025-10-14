@@ -1,4 +1,3 @@
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -7,24 +6,30 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Represents a staff member in the care home, either a Doctor or Nurse.
+ * Represents a staff member in the care home (Doctor, Nurse, Manager).
  * Staff have shifts and can perform actions based on their role.
  */
 public abstract class Staff {
     private final String id;
-    private String name;
+    private String fullName;
     private String passwordHash;
     private final List<Shift> shifts = new ArrayList<>();
 
-    public Staff(String id, String name, String password) {
+    public Staff(String id, String fullName, String password) {
         this.id = Objects.requireNonNull(id);
-        this.name = Objects.requireNonNull(name);
+        this.fullName = Objects.requireNonNull(fullName);
         setPassword(password);
     }
 
     public String getId() { return id; }
-    public String getName() { return name; }
-    public void setName(String name){ this.name = Objects.requireNonNull(name); }
+
+    public String getFullName() { return fullName; }    // ✅ aligned with CareHomeApp expectations
+    public void setFullName(String name){ this.fullName = Objects.requireNonNull(name); }
+
+    // ✅ returns hashed password (simple, for demo)
+    public String getPassword() {
+        return passwordHash;
+    }
 
     public void setPassword(String password){
         // trivial hash for demo; DO NOT use in production
@@ -74,7 +79,6 @@ public abstract class Staff {
     }
 
     private long getWeekHours(LocalDateTime ref){
-        // ISO week (Mon-Sun)
         LocalDate weekStart = ref.toLocalDate().with(java.time.DayOfWeek.MONDAY);
         LocalDate weekEnd = weekStart.plusDays(7);
         long hours = 0;
@@ -87,22 +91,31 @@ public abstract class Staff {
     public abstract boolean can(String action);
 
     @Override public String toString(){
-        return getClass().getSimpleName()+"{id="+id+", name="+name+"}";
+        return getClass().getSimpleName()+"{id="+id+", name="+fullName+"}";
     }
 }
+
+// ------------------------------
+// Subclasses for roles
+// ------------------------------
 
 class Doctor extends Staff {
     public Doctor(String id, String name, String password){ super(id,name,password); }
     @Override public boolean can(String action){
-        // doctors can do everything in this simple demo
-        return true;
+        return true; // doctors can do all actions
     }
 }
 
 class Nurse extends Staff {
     public Nurse(String id, String name, String password){ super(id,name,password); }
     @Override public boolean can(String action){
-        // nurses cannot create prescriptions; others OK
         return !action.equals("CREATE_PRESCRIPTION");
+    }
+}
+
+class Manager extends Staff {   // ✅ Added manager for login system
+    public Manager(String id, String name, String password){ super(id,name,password); }
+    @Override public boolean can(String action){
+        return true; // manager can perform all actions
     }
 }
