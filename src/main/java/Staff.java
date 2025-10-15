@@ -14,6 +14,22 @@ public abstract class Staff {
     private String fullName;
     private String passwordHash;
     private final List<Shift> shifts = new ArrayList<>();
+    // In Staff.java
+    private final List<Roster> rosters = new ArrayList<>();
+
+    public void addRoster(LocalDateTime start, LocalDateTime end) {
+        rosters.add(new Roster(start, end));
+    }
+
+    // Optional helper (used by your GUI to check)
+    public boolean isRosteredAt(LocalDateTime time) {
+        for (Roster r : rosters) {
+            if (!time.isBefore(r.getStart()) && !time.isAfter(r.getEnd())) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     public Staff(String id, String fullName, String password) {
         this.id = Objects.requireNonNull(id);

@@ -4,6 +4,7 @@ Bed.class
 Resident.class
 Doctor.class
 Logger.class
+Roster.class
 CareHomeSystem.class
 Prescription.class
 Manager.class

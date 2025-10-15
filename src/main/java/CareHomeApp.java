@@ -1,15 +1,36 @@
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
 import javafx.application.Application;
-import javafx.stage.Stage;
-import javafx.scene.Scene;
-import javafx.scene.control.*;
-import javafx.scene.layout.*;
-import javafx.scene.paint.Color;
-import javafx.scene.text.Font;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Scene;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Button;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.ComboBox;
+import javafx.scene.control.Dialog;
+import javafx.scene.control.Label;
+import javafx.scene.control.ListView;
+import javafx.scene.control.PasswordField;
+import javafx.scene.control.ScrollPane;
+import javafx.scene.control.Separator;
+import javafx.scene.control.TextArea;
+import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputDialog;
+import javafx.scene.control.Tooltip;
+import javafx.scene.layout.GridPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.VBox;
+import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
-import java.util.*;
-import java.time.LocalDateTime;
+import javafx.scene.text.Font;
+import javafx.stage.Stage;
 
 public class CareHomeApp extends Application {
     private final CareHomeSystem system = new CareHomeSystem();
@@ -134,13 +155,29 @@ public class CareHomeApp extends Application {
             String pwd = res.get("pwd").trim();
             Staff s = system.getStaff().get(id);
             if (s != null && s.checkPassword(pwd)) {
-                this.currentStaffId = id;
-                this.isManager = false;
-                showInfo("Login Successful", "Welcome, " + s.getFullName());
-                updateActiveUserLabel();
-            } else {
-                showError("Login Failed", "Invalid staff ID or password.");
-            }
+    this.currentStaffId = id;
+    this.isManager = false;
+
+    // ===== AUTO-ADD SHIFT UPON LOGIN =====
+    try {
+        // Create a working window around current time
+        LocalDateTime now = LocalDateTime.now();
+        boolean hasActiveShift = s.isOnDuty(now);
+
+        if (!hasActiveShift) {
+            s.addShift(new Shift(now.minusHours(1), now.plusHours(3)), 40);
+            System.out.println("[INFO] Auto-shift added for " + s.getId() +
+                    " (" + now.minusHours(1) + " - " + now.plusHours(3) + ")");
+        }
+    } catch (Exception ex) {
+        System.err.println("[WARN] Couldn't auto-assign shift: " + ex.getMessage());
+    }
+
+    showInfo("Login Successful", "Welcome, " + s.getFullName());
+    updateActiveUserLabel();
+    } else {
+        showError("Login Failed", "Invalid staff ID or password.");
+    }
         });
     }
 
