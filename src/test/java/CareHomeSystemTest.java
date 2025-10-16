@@ -1,9 +1,12 @@
-import org.junit.jupiter.api.*;
-import static org.junit.jupiter.api.Assertions.*;
-
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 public class CareHomeSystemTest {
 
@@ -13,7 +16,7 @@ public class CareHomeSystemTest {
 
     @BeforeEach
     void setup() throws Exception {
-        sys = new CareHomeSystem();
+        sys = new CareHomeSystem(false);  
         doc = new Doctor("D01", "Dr. Test", "pw");
         nurse = new Nurse("N01", "Nurse Test", "pw");
         sys.addStaff(doc);

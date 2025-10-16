@@ -39,10 +39,10 @@ public abstract class Staff {
 
     public String getId() { return id; }
 
-    public String getFullName() { return fullName; }    // ✅ aligned with CareHomeApp expectations
+    public String getFullName() { return fullName; }    // aligned with CareHomeApp expectations
     public void setFullName(String name){ this.fullName = Objects.requireNonNull(name); }
 
-    // ✅ returns hashed password (simple, for demo)
+    // returns hashed password (simple, for demo)
     public String getPassword() {
         return passwordHash;
     }
@@ -129,7 +129,7 @@ class Nurse extends Staff {
     }
 }
 
-class Manager extends Staff {   // ✅ Added manager for login system
+class Manager extends Staff {   // Added manager for login system
     public Manager(String id, String name, String password){ super(id,name,password); }
     @Override public boolean can(String action){
         return true; // manager can perform all actions

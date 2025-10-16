@@ -16,4 +16,5 @@ ShiftException.class
 Prescription$Line.class
 CareHomeApp.class
 Staff.class
+DatabaseManager.class
 Nurse.class

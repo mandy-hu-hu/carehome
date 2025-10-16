@@ -22,6 +22,12 @@ public class Prescription {
             this.unit = unit;
             this.schedule = schedule;
         }
+        
+        public String getMedicine() { return medicine; }
+        public double getDose() { return dose; }
+        public String getUnit() { return unit; }
+        public String getSchedule() { return schedule; }
+
         @Override public String toString(){
             return medicine+" "+dose+unit+" @ "+schedule;
         }
@@ -46,6 +52,17 @@ public class Prescription {
     public LocalDateTime getCreatedAt(){ return createdAt; }
     public List<Line> getLines(){ return Collections.unmodifiableList(lines); }
     public void addLine(Line l){ lines.add(l); }
+
+    public String toLineString() {
+        StringBuilder sb = new StringBuilder();
+        for (Line line : lines) {
+            sb.append(line.getMedicine()).append(",")
+            .append(line.getDose()).append(",")
+            .append(line.getUnit()).append(",")
+            .append(line.getSchedule()).append(";");
+        }
+        return sb.toString();
+    }
 
     @Override public String toString(){
         return "Prescription{id="+id+", resident="+residentId+", doctor="+doctorId+", lines="+lines+"}";

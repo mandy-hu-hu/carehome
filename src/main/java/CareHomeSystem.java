@@ -2,12 +2,18 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
 
 /**
  * The main system managing staff, beds, residents, prescriptions, and logs.
@@ -25,13 +31,24 @@ public class CareHomeSystem {
     private static final int WEEKLY_HOUR_LIMIT = 40;
     private static final String[] DEFAULT_STAFF_IDS = {"MGR01", "D01", "N01"};
 
-    // ---- CONSTRUCTOR ----
+    // ---- CONSTRUCTORS ----
     public CareHomeSystem() {
-        // 1) Initialise 48 beds (2 wards × 6 rooms × 4 beds each)
-        initializeBedsFixed4(); // makes 48 beds: W1R1B1..W2R6B4
+        this(true); // default = load demo data
+    }
 
-        // 2) Seed demo staff/residents so GUI actions work out of the box
-        seedDemoData();
+    public CareHomeSystem(boolean loadDemoData) {
+        DatabaseManager.initialize();
+        
+        // 1) Initialise beds
+        initializeBedsFixed4();
+
+        // 2) Optionally seed demo data
+        if (loadDemoData) {
+            seedDemoData();
+        }
+        else{
+            loadFromDatabase();
+        }
     }
 
     private void initializeBedsFixed4() {
@@ -435,6 +452,154 @@ public class CareHomeSystem {
             throw new NotRosteredException("Staff " + staffId + " not rostered at " + at);
         }
     }
+
+    public void saveToDatabase() {
+        try (Connection conn = DatabaseManager.connect()) {
+
+            // 1) Clear existing data (so we don’t duplicate)
+            try (Statement clear = conn.createStatement()) {
+                clear.executeUpdate("DELETE FROM staff");
+                clear.executeUpdate("DELETE FROM residents");
+                clear.executeUpdate("DELETE FROM beds");
+                clear.executeUpdate("DELETE FROM prescriptions");
+                clear.executeUpdate("DELETE FROM logs");
+            }
+
+            // 2) Save Staff
+            String staffSql = "INSERT INTO staff (id, name, role) VALUES (?,?,?)";
+            try (PreparedStatement ps = conn.prepareStatement(staffSql)) {
+                for (Staff s : staff.values()) {
+                    ps.setString(1, s.getId());
+                    ps.setString(2, s.getFullName());
+                    ps.setString(3, s.getClass().getSimpleName());
+                    ps.executeUpdate();
+                }
+            }
+
+            // 3) Save Residents
+            String residentSql = "INSERT INTO residents (id, name, gender) VALUES (?,?,?)";
+            try (PreparedStatement ps = conn.prepareStatement(residentSql)) {
+                for (Resident r : residents.values()) {
+                    ps.setString(1, r.getId());
+                    ps.setString(2, r.getFullName());
+                    ps.setString(3, r.getGender().toString());
+                    ps.executeUpdate();
+                }
+            }
+
+            // 4) Save Beds
+            String bedSql = "INSERT INTO beds (id, resident_id) VALUES (?,?)";
+            try (PreparedStatement ps = conn.prepareStatement(bedSql)) {
+                for (Bed b : beds.values()) {
+                    ps.setString(1, b.getId());
+                    ps.setString(2, (b.getResident() != null) ? b.getResident().getId() : null);
+                    ps.executeUpdate();
+                }
+            }
+
+            // 5) Save Prescriptions (optional if you have details)
+            String presSql = "INSERT INTO prescriptions (id, resident_id, doctor_id, details) VALUES (?,?,?,?)";
+            try (PreparedStatement ps = conn.prepareStatement(presSql)) {
+                for (Prescription p : prescriptions.values()) {
+                    ps.setString(1, p.getId());
+                    ps.setString(2, p.getResidentId());
+                    ps.setString(3, p.getDoctorId());
+                    ps.setString(4, p.toLineString()); // assuming you have this
+                    ps.executeUpdate();
+                }
+            }
+
+            // 6) Save Logs
+            String logSql = "INSERT INTO logs (entry) VALUES (?)";
+            try (PreparedStatement ps = conn.prepareStatement(logSql)) {
+                for (String log : logger.getEntries()) {
+                    ps.setString(1, log);
+                    ps.executeUpdate();
+                }
+            }
+
+            System.out.println("Data successfully saved to SQLite.");
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void loadFromDatabase() {
+        try (Connection conn = DatabaseManager.connect()) {
+
+            // Clear current in-memory collections
+            staff.clear();
+            residents.clear();
+            beds.clear();
+            prescriptions.clear();
+            medLogs.clear();
+            logger.clear();
+
+            // 1) Load Staff
+            try (Statement st = conn.createStatement();
+                ResultSet rs = st.executeQuery("SELECT * FROM staff")) {
+                while (rs.next()) {
+                    String id = rs.getString("id");
+                    String name = rs.getString("name");
+                    String role = rs.getString("role");
+                    Staff s;
+                    if ("Doctor".equals(role)) s = new Doctor(id, name, "");
+                    else if ("Nurse".equals(role)) s = new Nurse(id, name, "");
+                    if ("Doctor".equals(role)) {
+                        s = new Doctor(id, name, "");
+                    } else if ("Nurse".equals(role)) {
+                        s = new Nurse(id, name, "");
+                    } else {
+                        // fallback if unknown
+                        s = new Nurse(id, name, "");
+                    }
+                    addStaff(s);
+                }
+            }
+
+            // 2) Load Residents
+            try (Statement st = conn.createStatement();
+                ResultSet rs = st.executeQuery("SELECT * FROM residents")) {
+                while (rs.next()) {
+                    String id = rs.getString("id");
+                    String name = rs.getString("name");
+                    Resident.Gender gender = Resident.Gender.valueOf(rs.getString("gender"));
+                    addResident(new Resident(id, name, gender));
+                }
+            }
+
+            // 3) Load Beds
+            try (Statement st = conn.createStatement();
+                ResultSet rs = st.executeQuery("SELECT * FROM beds")) {
+                while (rs.next()) {
+                    String id = rs.getString("id");
+                    String residentId = rs.getString("resident_id");
+                    Bed bed = new Bed(id);
+                    if (residentId != null && residents.containsKey(residentId)) {
+                        bed.assign(residents.get(residentId));
+                    }
+                    addBed(bed);
+                }
+            }
+
+            // 4) Load Logs
+            try (Statement st = conn.createStatement();
+                ResultSet rs = st.executeQuery("SELECT * FROM logs")) {
+                while (rs.next()) {
+                    String entry = rs.getString("entry");
+                    logger.addEntry(entry);
+                }
+            }
+
+            System.out.println("Data successfully loaded from SQLite.");
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+
 
     // ---- READONLY VIEWS ----
     public List<String> getLogs(){ return logger.getEntries(); }

@@ -33,17 +33,17 @@ import javafx.scene.text.Font;
 import javafx.stage.Stage;
 
 public class CareHomeApp extends Application {
-    private final CareHomeSystem system = new CareHomeSystem();
-    private static final String DATA_FILE = "carehome-data.txt";
 
+    private CareHomeSystem system;                 // created in start()
     private String currentStaffId = null;
     private boolean isManager = false;
-    private Label activeUserLabel; // shows who is logged in
+    private Label activeUserLabel;
 
     @Override
     public void start(Stage stage) {
-        // Restore previous data if any
-        system.loadFromFile(DATA_FILE);
+        // Use DB persistence and skip demo seeds
+        system = new CareHomeSystem(false);
+        system.loadFromDatabase();
 
         Label title = new Label("🏥 Care Home Management System");
         title.setFont(Font.font(18));
@@ -79,11 +79,11 @@ public class CareHomeApp extends Application {
         checkBed.setOnAction(e        -> showCheckBedWindow());
         bedOverview.setOnAction(e     -> showBedOverviewWindow());
         exit.setOnAction(e -> {
-            system.saveToFile(DATA_FILE);
+            system.saveToDatabase();
+            System.out.println("✅ Data saved to database. Exiting...");
             stage.close();
         });
 
-        // Root (make sure we declare it before use)
         VBox root = new VBox(
                 15, title, activeUserLabel,
                 btnLoginStaff, btnLoginManager,
@@ -101,10 +101,11 @@ public class CareHomeApp extends Application {
 
     @Override
     public void stop() {
-        system.saveToFile(DATA_FILE);
+        system.saveToDatabase();
+        System.out.println("✅ Database saved before exit.");
     }
 
-    // ========================== LOGIN =================================
+    // ========================== LOGIN ==========================
 
     private void loginAsManager() {
         TextInputDialog dialog = new TextInputDialog("MGR01");
@@ -131,8 +132,7 @@ public class CareHomeApp extends Application {
         PasswordField pwdField = new PasswordField();
 
         GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
+        grid.setHgap(10); grid.setVgap(10);
         grid.add(idLabel, 0, 0);  grid.add(idField, 1, 0);
         grid.add(pwdLabel, 0, 1); grid.add(pwdField, 1, 1);
 
@@ -155,33 +155,28 @@ public class CareHomeApp extends Application {
             String pwd = res.get("pwd").trim();
             Staff s = system.getStaff().get(id);
             if (s != null && s.checkPassword(pwd)) {
-    this.currentStaffId = id;
-    this.isManager = false;
+                this.currentStaffId = id;
+                this.isManager = false;
 
-    // ===== AUTO-ADD SHIFT UPON LOGIN =====
-    try {
-        // Create a working window around current time
-        LocalDateTime now = LocalDateTime.now();
-        boolean hasActiveShift = s.isOnDuty(now);
+                try {
+                    LocalDateTime now = LocalDateTime.now();
+                    if (!s.isOnDuty(now)) {
+                        s.addShift(new Shift(now.minusHours(1), now.plusHours(3)), 40);
+                        System.out.println("[INFO] Auto-shift added for " + s.getId());
+                    }
+                } catch (Exception ex) {
+                    System.err.println("[WARN] Couldn’t auto-assign shift: " + ex.getMessage());
+                }
 
-        if (!hasActiveShift) {
-            s.addShift(new Shift(now.minusHours(1), now.plusHours(3)), 40);
-            System.out.println("[INFO] Auto-shift added for " + s.getId() +
-                    " (" + now.minusHours(1) + " - " + now.plusHours(3) + ")");
-        }
-    } catch (Exception ex) {
-        System.err.println("[WARN] Couldn't auto-assign shift: " + ex.getMessage());
-    }
-
-    showInfo("Login Successful", "Welcome, " + s.getFullName());
-    updateActiveUserLabel();
-    } else {
-        showError("Login Failed", "Invalid staff ID or password.");
-    }
+                showInfo("Login Successful", "Welcome, " + s.getFullName());
+                updateActiveUserLabel();
+            } else {
+                showError("Login Failed", "Invalid staff ID or password.");
+            }
         });
     }
 
-    // ========================== WINDOWS ================================
+    // ========================== WINDOWS ==========================
 
     private void showAddResidentWindow() {
         Stage w = new Stage();
@@ -469,7 +464,7 @@ public class CareHomeApp extends Application {
                     result.setTextFill(Color.BLACK);
                 } else {
                     result.setText("Resident: " + r.getFullName() + " (" + r.getGender() + ")");
-                    result.setTextFill(r.getGender() == Resident.Gender.M ? Color.BLUE : Color.RED);
+                    result.setTextFill(r.getGender() == Resident.Gender.M ? Color.DODGERBLUE : Color.RED);
                 }
             } catch (Exception ex) {
                 result.setText("Error: " + ex.getMessage());
@@ -492,7 +487,7 @@ public class CareHomeApp extends Application {
         w.setTitle("Ward Overview (Blue=M, Red=F, White=Vacant)");
 
         Map<String, Bed> allBeds = system.getBeds();
-        if (allBeds.isEmpty()) {
+        if (allBeds == null || allBeds.isEmpty()) {
             alert(Alert.AlertType.WARNING, "No beds found in the system!");
             return;
         }
@@ -501,21 +496,23 @@ public class CareHomeApp extends Application {
         wardsBox.setPadding(new Insets(20));
         wardsBox.setAlignment(Pos.CENTER);
 
-        // Group beds by ward and room
+        // Group beds by ward and room (assumes IDs like W1R2B3)
         Map<String, List<Bed>> ward1 = new LinkedHashMap<>();
         Map<String, List<Bed>> ward2 = new LinkedHashMap<>();
 
         for (Bed bed : allBeds.values()) {
-            String id = bed.getId(); // e.g. W1R2B3
+            String id = bed.getId();           // e.g. W1R2B3
+            if (id.length() < 4) continue;
             String wardKey = id.substring(0, 2); // W1 or W2
-            String roomKey = id.substring(0, 4); // W1R1 ... W2R3
-            if (wardKey.equals("W1"))
+            String roomKey = id.substring(0, 4); // W1R1, W1R2, ...
+
+            if ("W1".equals(wardKey)) {
                 ward1.computeIfAbsent(roomKey, k -> new ArrayList<>()).add(bed);
-            else
+            } else {
                 ward2.computeIfAbsent(roomKey, k -> new ArrayList<>()).add(bed);
+            }
         }
 
-        // Build UI for both wards
         wardsBox.getChildren().addAll(
                 createWardView("Ward 1", ward1),
                 createWardView("Ward 2", ward2)
@@ -553,19 +550,24 @@ public class CareHomeApp extends Application {
                 Rectangle rect = new Rectangle(30, 30);
                 rect.setStroke(Color.BLACK);
 
-                if (bed.isVacant()) rect.setFill(Color.WHITE);
-                else if (bed.getResident().getGender() == Resident.Gender.M)
+                if (bed.isVacant()) {
+                    rect.setFill(Color.WHITE);
+                } else if (bed.getResident().getGender() == Resident.Gender.M) {
                     rect.setFill(Color.DODGERBLUE);
-                else rect.setFill(Color.RED);
+                } else {
+                    rect.setFill(Color.RED);
+                }
 
-                Tooltip tip = new Tooltip(bed.isVacant()
-                        ? bed.getId() + " (Vacant)"
-                        : bed.getId() + " → " + bed.getResident().getFullName()
-                        + " (" + bed.getResident().getGender() + ")");
+                Tooltip tip = new Tooltip(
+                        bed.isVacant()
+                                ? bed.getId() + " (Vacant)"
+                                : bed.getId() + " → " + bed.getResident().getFullName()
+                                + " (" + bed.getResident().getGender() + ")"
+                );
                 Tooltip.install(rect, tip);
 
                 roomBox.add(rect, cc++, rr);
-                if (cc >= 2) { cc = 0; rr++; } // arrange up to 2 columns
+                if (cc >= 2) { cc = 0; rr++; } // up to 2 columns
             }
 
             roomGrid.add(roomBox, col++, row);
@@ -576,7 +578,7 @@ public class CareHomeApp extends Application {
         return wardBox;
     }
 
-    // ========================== HELPERS ================================
+    // ========================== HELPERS ==========================
 
     private static List<Prescription.Line> parseLines(String text){
         List<Prescription.Line> list = new ArrayList<>();
